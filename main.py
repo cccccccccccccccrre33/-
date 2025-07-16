@@ -2,7 +2,7 @@ import os, requests, asyncio
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-TOKEN = os.getenv("TOKEN")  # Токен бота из переменной окружения
+TOKEN = os.getenv("TOKEN")  # Токен бота из переменных окружения
 
 # ---------- utils ----------
 def fmt_price(p):
@@ -52,7 +52,7 @@ async def unified_24h():
         try:
             data = await asyncio.to_thread(fn)
             for k, v in data.items():
-                if k not in coins:  # берём первое успешно полученное значение
+                if k not in coins:
                     coins[k] = v
         except:
             pass
@@ -96,8 +96,8 @@ TXT = {
             "• /fav_remove btc — видалити\n\n"
             "🔗 Сервіси\n"
             "• <a href=\"https://www.binance.com/activity/referral-entry/CPA?ref=CPA_00POHWMMJK\">Binance</a>\n"
-            "• <a href=\"https://www.bybit.com/invite?ref=A5Y25JQ\">Bybit</a>\n""• <a href=\"https://promote.mexc.com/r/XzfzE6vM\">MEXC</a>\n"
-            "• <a href=\"https://bingx.com/invite/XQIWQZ/\">BingX</a>\n"
+            "• <a href=\"https://www.bybit.com/invite?ref=A5Y25JQ\">Bybit</a>\n"
+            "• <a href=\"https://promote.mexc.com/r/XzfzE6vM\">MEXC</a>\n""• <a href=\"https://bingx.com/invite/XQIWQZ/\">BingX</a>\n"
             "• <a href=\"https://okx.com/join/33545594\">OKX</a>"
         ),
         hdr="💰 Ціни:", none="❌ немає даних",
@@ -130,7 +130,8 @@ TXT = {
     )
 }
 
-def L(u): return TXT.get((u.effective_user.language_code or "en")[:2], TXT["en"])
+def L(u): 
+    return TXT.get((u.effective_user.language_code or "en")[:2], TXT["en"])
 
 # ---------- избранное ----------
 favs = {}
@@ -157,35 +158,4 @@ async def top_cmd(u: Update, _):
     data = await unified_24h()
     gain = sorted(data.items(), key=lambda x: x[1][1], reverse=True)[:5]
     loss = sorted(data.items(), key=lambda x: x[1][1])[:5]
-    lines = [t["top_gain"]]
-    for n, (p, ch) in gain:
-        lines.append(f"{n:<6} {pct(ch):>7}  ${fmt_price(p)}")
-    lines.append("\n" + t["top_loss"])
-    for n, (p, ch) in loss:
-        lines.append(f"{n:<6} {pct(ch):>7}  ${fmt_price(p)}")
-    await u.message.reply_text("\n".join(lines), parse_mode="HTML")
-
-async def fav_add(u: Update, c: ContextTypes.DEFAULT_TYPE):
-    if not c.args:
-        return await u.message.reply_text("Usage: /fav_add btc ada")
-    favs.setdefault(u.effective_user.id, set()).update(a.lower() for a in c.args)
-    await u.message.reply_text("✅ added")
-
-async def fav_remove(u: Update, c: ContextTypes.DEFAULT_TYPE):
-    if not c.args:
-        return await u.message.reply_text("Usage: /fav_remove btc ada")
-    s = favs.setdefault(u.effective_user.id, set())
-    for coin in c.args:
-        s.discard(coin.lower())
-    await u.message.reply_text("✅ updated")
-
-async def fav_cmd(u: Update, _):
-    t = L(u)
-    s = favs.get(u.effective_user.id, set())
-    if not s:
-        return await u.message.reply_text(t["fav_empty"])
-    data = await unified_24h()
-    lines = ["⭐️"]
-    for coin in sorted(s):
-        if coin.upper() in data:
-            lines.append(f"{coin.upper():
+    lines = [t["
