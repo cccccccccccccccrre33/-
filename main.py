@@ -1,37 +1,51 @@
-import os, requests, asyncio
+import os
+import requests
+import asyncio
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-TOKEN = os.getenv("TOKEN")  # Токен бота из переменных окружения
+TOKEN = os.getenv("TOKEN")  # Токен из переменных окружения
 
 # ---------- utils ----------
 def fmt_price(p):
-    if p >= 1:      return f"{p:,.2f}"
-    elif p >= 0.01: return f"{p:,.4f}"
+    if p >= 1:
+        return f"{p:,.2f}"
+    elif p >= 0.01:
+        return f"{p:,.4f}"
     return f"{p:,.6f}"
 
-def pct(x): return f"{x:+.2f}%"
+def pct(x):
+    return f"{x:+.2f}%"
+
 
 # ---------- price parsers (spot USDT‑пары) ----------
 def b24_binance():
     j = requests.get("https://api.binance.com/api/v3/ticker/24hr", timeout=5).json()
-    return {d["symbol"][:-4]: (float(d["lastPrice"]), float(d["priceChangePercent"]))
-            for d in j if d["symbol"].endswith("USDT")}
+    return {
+        d["symbol"][:-4]: (float(d["lastPrice"]), float(d["priceChangePercent"]))
+        for d in j if d["symbol"].endswith("USDT")
+    }
 
 def b24_bybit():
     j = requests.get("https://api.bybit.com/v2/public/tickers", timeout=5).json()["result"]
-    return {d["symbol"][:-5]: (float(d["last_price"]), float(d["price_24h_pcnt"])*100)
-            for d in j if d["symbol"].endswith("USDT")}
+    return {
+        d["symbol"][:-5]: (float(d["last_price"]), float(d["price_24h_pcnt"]) * 100)
+        for d in j if d["symbol"].endswith("USDT")
+    }
 
 def b24_mexc():
     j = requests.get("https://api.mexc.com/api/v3/ticker/24hr", timeout=5).json()
-    return {d["symbol"][:-4]: (float(d["lastPrice"]), float(d["priceChangePercent"]))
-            for d in j if d["symbol"].endswith("USDT")}
+    return {
+        d["symbol"][:-4]: (float(d["lastPrice"]), float(d["priceChangePercent"]))
+        for d in j if d["symbol"].endswith("USDT")
+    }
 
 def b24_bingx():
     j = requests.get("https://api.bingx.com/api/v1/market/getAllTickers", timeout=5).json()["data"]
-    return {d["symbol"][:-4].upper(): (float(d["lastPrice"]), float(d["priceChangePercent"]))
-            for d in j if d["symbol"].endswith("USDT")}
+    return {
+        d["symbol"][:-4].upper(): (float(d["lastPrice"]), float(d["priceChangePercent"]))
+        for d in j if d["symbol"].endswith("USDT")
+    }
 
 def b24_okx():
     j = requests.get("https://www.okx.com/api/v5/market/tickers?instType=SPOT", timeout=5).json()["data"]
@@ -57,6 +71,11 @@ async def unified_24h():
         except:
             pass
     return coins
+
+async def get_price_single(coin):
+    data = await unified_24h()
+    return data.get(coin.upper())
+
 
 # ---------- тексты ----------
 TXT = {
@@ -97,7 +116,8 @@ TXT = {
             "🔗 Сервіси\n"
             "• <a href=\"https://www.binance.com/activity/referral-entry/CPA?ref=CPA_00POHWMMJK\">Binance</a>\n"
             "• <a href=\"https://www.bybit.com/invite?ref=A5Y25JQ\">Bybit</a>\n"
-            "• <a href=\"https://promote.mexc.com/r/XzfzE6vM\">MEXC</a>\n""• <a href=\"https://bingx.com/invite/XQIWQZ/\">BingX</a>\n"
+            "• <a href=\"https://promote.mexc.com/r/XzfzE6vM\">MEXC</a>\n"
+            "• <a href=\"https://bingx.com/invite/XQIWQZ/\">BingX</a>\n"
             "• <a href=\"https://okx.com/join/33545594\">OKX</a>"
         ),
         hdr="💰 Ціни:", none="❌ немає даних",
@@ -133,10 +153,12 @@ TXT = {
 def L(u): 
     return TXT.get((u.effective_user.language_code or "en")[:2], TXT["en"])
 
+
 # ---------- избранное ----------
 favs = {}
 
 # ---------- handlers ----------
+
 async def start_cmd(u: Update, _):
     await u.message.reply_text(L(u)["start"], parse_mode="HTML", disable_web_page_preview=True)
 
@@ -158,4 +180,13 @@ async def top_cmd(u: Update, _):
     data = await unified_24h()
     gain = sorted(data.items(), key=lambda x: x[1][1], reverse=True)[:5]
     loss = sorted(data.items(), key=lambda x: x[1][1])[:5]
-    lines = [t["
+    lines = [t["top_gain"]]
+    for n, (p, ch) in gain:
+        lines.append(f"{n:<6} {pct(ch):>7}  ${fmt_price(p)}")
+    lines.append("\n" + t["top_loss"])
+    for n, (p, ch) in loss:
+        lines.append(f"{n:<6} {pct(ch):>7}  ${fmt_price(p)}")
+    await u.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+async def fav_add(u: Update, c):
+    if not c.args:
