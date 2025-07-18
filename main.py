@@ -1,51 +1,44 @@
 import os
-import requests
 import asyncio
+import requests
+from flask import Flask
+from threading import Thread
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-TOKEN = os.getenv("TOKEN")  # Токен из переменных окружения
+# ---------- Config ----------
+TOKEN = os.getenv("TOKEN")
+app = ApplicationBuilder().token(TOKEN).build()
 
-# ---------- utils ----------
+# ---------- Utils ----------
 def fmt_price(p):
-    if p >= 1:
-        return f"{p:,.2f}"
-    elif p >= 0.01:
-        return f"{p:,.4f}"
+    if p >= 1: return f"{p:,.2f}"
+    elif p >= 0.01: return f"{p:,.4f}"
     return f"{p:,.6f}"
 
-def pct(x):
-    return f"{x:+.2f}%"
+def pct(x): return f"{x:+.2f}%"
 
 
-# ---------- price parsers (spot USDT‑пары) ----------
+# ---------- Price Parsers ----------
 def b24_binance():
     j = requests.get("https://api.binance.com/api/v3/ticker/24hr", timeout=5).json()
-    return {
-        d["symbol"][:-4]: (float(d["lastPrice"]), float(d["priceChangePercent"]))
-        for d in j if d["symbol"].endswith("USDT")
-    }
+    return {d["symbol"][:-4]: (float(d["lastPrice"]), float(d["priceChangePercent"]))
+            for d in j if d["symbol"].endswith("USDT")}
 
 def b24_bybit():
     j = requests.get("https://api.bybit.com/v2/public/tickers", timeout=5).json()["result"]
-    return {
-        d["symbol"][:-5]: (float(d["last_price"]), float(d["price_24h_pcnt"]) * 100)
-        for d in j if d["symbol"].endswith("USDT")
-    }
+    return {d["symbol"][:-5]: (float(d["last_price"]), float(d["price_24h_pcnt"])*100)
+            for d in j if d["symbol"].endswith("USDT")}
 
 def b24_mexc():
     j = requests.get("https://api.mexc.com/api/v3/ticker/24hr", timeout=5).json()
-    return {
-        d["symbol"][:-4]: (float(d["lastPrice"]), float(d["priceChangePercent"]))
-        for d in j if d["symbol"].endswith("USDT")
-    }
+    return {d["symbol"][:-4]: (float(d["lastPrice"]), float(d["priceChangePercent"]))
+            for d in j if d["symbol"].endswith("USDT")}
 
 def b24_bingx():
     j = requests.get("https://api.bingx.com/api/v1/market/getAllTickers", timeout=5).json()["data"]
-    return {
-        d["symbol"][:-4].upper(): (float(d["lastPrice"]), float(d["priceChangePercent"]))
-        for d in j if d["symbol"].endswith("USDT")
-    }
+    return {d["symbol"][:-4].upper(): (float(d["lastPrice"]), float(d["priceChangePercent"]))
+            for d in j if d["symbol"].endswith("USDT")}
 
 def b24_okx():
     j = requests.get("https://www.okx.com/api/v5/market/tickers?instType=SPOT", timeout=5).json()["data"]
@@ -72,12 +65,8 @@ async def unified_24h():
             pass
     return coins
 
-async def get_price_single(coin):
-    data = await unified_24h()
-    return data.get(coin.upper())
 
-
-# ---------- тексты ----------
+# ---------- Тексты ----------
 TXT = {
     "ru": dict(
         start=(
@@ -150,15 +139,14 @@ TXT = {
     )
 }
 
-def L(u): 
+def L(u):
     return TXT.get((u.effective_user.language_code or "en")[:2], TXT["en"])
 
 
-# ---------- избранное ----------
+# ---------- Избранное ----------
 favs = {}
 
-# ---------- handlers ----------
-
+# ---------- Handlers ----------
 async def start_cmd(u: Update, _):
     await u.message.reply_text(L(u)["start"], parse_mode="HTML", disable_web_page_preview=True)
 
@@ -190,3 +178,54 @@ async def top_cmd(u: Update, _):
 
 async def fav_add(u: Update, c):
     if not c.args:
+        return await u.message.reply_text("Usage: /fav_add btc ada")
+    favs.setdefault(u.effective_user.id, set()).update(a.lower() for a in c.args)
+    await u.message.reply_text("✅ added")
+
+async def fav_remove(u: Update, c):
+    if not c.args:
+        return await u.message.reply_text("Usage: /fav_remove btc ada")
+    s = favs.setdefault(u.effective_user.id, set())
+    for coin in c.args:
+        s.discard(coin.lower())
+    await u.message.reply_text("✅ updated")
+
+async def fav_cmd(u: Update, _):
+    t = L(u)
+    s = favs.get(u.effective_user.id, set())
+    if not s:
+        return await u.message.reply_text(t["fav_empty"])
+    data = await unified_24h()
+    lines = ["⭐"]
+    for coin in sorted(s):
+        if coin.upper() in data:
+            lines.append(f"{coin.upper():<6}: ${fmt_price(data[coin.upper()][0])}")
+        else:
+            lines.append(f"{coin.upper():<6}: {t['none']}")
+    await u.message.reply_text("\n".join(lines))
+
+
+# ---------- Keep-alive Flask для UptimeRobot ----------
+keep_alive_app = Flask("")
+
+@keep_alive_app.route("/")
+def home():
+    return "✅ Bot is alive!"
+
+def run_keep_alive():
+    keep_alive_app.run(host="0.0.0.0", port=8080)
+
+
+# ---------- Main ----------
+if __name__ == "__main__":
+    Thread(target=run_keep_alive).start()
+
+    app.add_handler(CommandHandler("start", start_cmd))
+    app.add_handler(CommandHandler("price", price_cmd))
+    app.add_handler(CommandHandler("top", top_cmd))
+    app.add_handler(CommandHandler("fav_add", fav_add))
+    app.add_handler(CommandHandler("fav_remove", fav_remove))
+    app.add_handler(CommandHandler("fav", fav_cmd))
+
+    print("🚀 Бот запущен и работает 24/7 на Replit!")
+    app.run_polling()
